@@ -35,9 +35,13 @@ Eine verwandte Variante läuft als Hugging-Face-Space: [MikeChandler/comfyui-mod
 - Docker, oder Python 3.12 mit Flask und `wget`
 - Ein ComfyUI-Verzeichnis, das nach `COMFY_ROOT` gemountet bzw. gesetzt wird
 
-**Hinweis:** Das Dockerfile kopiert `templates/` und `app.py` ruft `templates/index.html` auf. Dieser Ordner liegt derzeit **nicht** in diesem GitHub-Repository; `docker build` schlägt deshalb fehl, bis das Template ergänzt ist. Die REST-API in `app.py` und der Katalog in `models.json` sind vollständig enthalten.
+## Web-Oberfläche
 
-## Start mit Docker (wenn `templates/` vorhanden ist)
+![Screenshot](docs/screenshot.png)
+
+`templates/index.html` ist eine einzelne Seite ohne Build-Schritt: Suche, Filter nach Kategorie und Status, Mehrfachauswahl, Download-Warteschlange mit Fortschrittsbalken, Abbrechen, Historie, Speicheranzeige, Parallelität einstellen und eigene Modelle anlegen oder entfernen.
+
+## Start mit Docker
 
 ```bash
 git clone https://github.com/Mike-Chandlerr/comfyui-model-selector.git
@@ -56,10 +60,10 @@ docker run -d \
 
 Danach: [http://localhost:5050](http://localhost:5050).
 
-Ohne Docker, ebenfalls nur mit vorhandenem Template:
+Ohne Docker:
 
 ```bash
-pip install flask
+pip install -r requirements.txt
 export COMFY_ROOT=/pfad/zu/ComfyUI
 python app.py
 ```
@@ -107,7 +111,9 @@ curl -X POST http://localhost:5050/api/models/add \
 
 ## Technik
 
-Python 3.12, Flask, wget, Docker. Die bestehende README nennt die Lizenz MIT.
+Python 3.12, Flask, wget, Docker, Vanilla-JS-Oberfläche. Lizenz: MIT (siehe `LICENSE`).
+
+**Sicherheit:** Ziele eigener Modelle müssen innerhalb von `COMFY_ROOT` liegen (Pfade mit `../` werden abgelehnt). Die App hat keine Anmeldung – nur im eigenen Netz betreiben.
 
 ---
 
@@ -132,9 +138,11 @@ See the German section for the category table (counts taken from `models.json`).
 - Docker, or Python 3.12 with Flask and `wget`
 - A ComfyUI directory mounted or set as `COMFY_ROOT`
 
-**Note:** The Dockerfile copies `templates/`, and `app.py` renders `templates/index.html`. That folder is **not** in this GitHub repository at the moment, so `docker build` will fail until the template is added. The REST API in `app.py` and the catalog in `models.json` are complete.
+## Web UI
 
-## Run with Docker (once `templates/` is present)
+`templates/index.html` is a single page with no build step: search, category and status filters, multi-select, download queue with progress bars, cancel, history, disk usage, concurrency setting, and adding or removing custom models (see the screenshot above).
+
+## Run with Docker
 
 ```bash
 git clone https://github.com/Mike-Chandlerr/comfyui-model-selector.git
@@ -153,10 +161,10 @@ docker run -d \
 
 Then open [http://localhost:5050](http://localhost:5050).
 
-Without Docker, also only with a template in place:
+Without Docker:
 
 ```bash
-pip install flask
+pip install -r requirements.txt
 export COMFY_ROOT=/path/to/ComfyUI
 python app.py
 ```
@@ -165,7 +173,9 @@ The app listens on `0.0.0.0` and `PORT` (default 5000). Environment variables an
 
 ## Tech stack
 
-Python 3.12, Flask, wget, Docker. The existing README states the license is MIT.
+Python 3.12, Flask, wget, Docker, vanilla JS UI. License: MIT (see `LICENSE`).
+
+**Security:** custom model destinations must stay inside `COMFY_ROOT` (paths with `../` are rejected). The app has no authentication – run it on your own network only.
 
 ---
 

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ComfyUI Model Downloader</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --border: #2a2f3a;
+    --text: #e6e8ec; --muted: #8b93a3; --accent: #4f8cff; --ok: #3fb950;
+    --warn: #d29922; --err: #f85149;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--panel); position: sticky; top: 0; z-index: 5; }
+  header h1 { font-size: 18px; margin: 0; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  .disk { min-width: 260px; }
+  .bar { height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; }
+  .bar > span { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+  main { display: grid; grid-template-columns: 1fr 360px; gap: 16px; padding: 16px 20px; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .panel h2 { font-size: 14px; margin: 0 0 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  input, select, button { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; }
+  input[type=search] { flex: 1; min-width: 200px; }
+  button { cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:disabled { opacity: .45; cursor: default; }
+  button.small { padding: 3px 8px; font-size: 12px; }
+  button.danger:hover { border-color: var(--err); color: var(--err); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .chip { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--panel2); cursor: pointer; font-size: 12px; user-select: none; }
+  .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chip .n { opacity: .7; margin-left: 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; position: sticky; top: 58px; background: var(--panel); }
+  tr:hover td { background: var(--panel2); }
+  td.name { font-weight: 500; word-break: break-word; }
+  td.dest { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; word-break: break-all; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+  .badge.ok { color: var(--ok); border-color: var(--ok); }
+  .badge.q { color: var(--warn); border-color: var(--warn); }
+  .badge.dl { color: var(--accent); border-color: var(--accent); }
+  .badge.user { color: #c297ff; border-color: #c297ff; }
+  .job { padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .job:last-child { border-bottom: 0; }
+  .job .row { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .job .meta { color: var(--muted); font-size: 12px; }
+  .empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+  .side { display: flex; flex-direction: column; gap: 16px; }
+  form.add { display: grid; gap: 6px; }
+  form.add input { width: 100%; }
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--border); padding: 10px 16px; border-radius: 8px; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .toast.err { border-color: var(--err); }
+  .selbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-top: 10px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>ComfyUI Model Downloader</h1>
+    <div class="sub" id="root">COMFY_ROOT: …</div>
+  </div>
+  <div class="disk">
+    <div class="sub" id="diskText">Disk: …</div>
+    <div class="bar"><span id="diskBar" style="width:0"></span></div>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="toolbar">
+      <input type="search" id="search" placeholder="Search name, file or path …">
+      <select id="filterState">
+        <option value="all">All models</option>
+        <option value="missing">Not downloaded</option>
+        <option value="present">Downloaded</option>
+        <option value="user">Custom models</option>
+      </select>
+      <button id="selectVisible">Select visible missing</button>
+      <button id="clearSel">Clear selection</button>
+    </div>
+    <div class="chips" id="chips"></div>
+    <table>
+      <thead><tr><th style="width:28px"></th><th>Model</th><th>Category</th><th>Size</th><th>Destination</th><th>Status</th><th></th></tr></thead>
+      <tbody id="rows"><tr><td colspan="7" class="empty">Loading catalog …</td></tr></tbody>
+    </table>
+    <div class="selbar">
+      <span class="sub" id="selInfo">0 selected</span>
+      <button class="primary" id="downloadBtn" disabled>Download selected</button>
+    </div>
+  </section>
+
+  <aside class="side">
+    <section class="panel">
+      <h2>Downloads</h2>
+      <div id="active"><div class="empty">No active downloads.</div></div>
+      <h2 style="margin-top:14px">Queue</h2>
+      <div id="queue"><div class="empty">Queue is empty.</div></div>
+    </section>
+
+    <section class="panel">
+      <h2>History</h2>
+      <div id="history"><div class="empty">Nothing yet.</div></div>
+    </section>
+
+    <section class="panel">
+      <h2>Settings</h2>
+      <label class="sub" for="maxConc">Parallel downloads (1–5)</label>
+      <div class="toolbar" style="margin-top:6px">
+        <input type="number" id="maxConc" min="1" max="5" value="2" style="width:80px">
+        <button id="saveConc">Save</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Add custom model</h2>
+      <form class="add" id="addForm">
+        <input name="name" placeholder="Name" required>
+        <input name="category" placeholder="Category (e.g. LoRA)" list="catList" required>
+        <datalist id="catList"></datalist>
+        <input name="size" placeholder="Size (e.g. 500MB)" required>
+        <input name="url" type="url" placeholder="https://huggingface.co/…/resolve/main/file.safetensors" required>
+        <input name="dest" placeholder="Destination (e.g. models/loras/)" required>
+        <input name="filename" placeholder="File name" required>
+        <button class="primary" type="submit">Add model</button>
+      </form>
+    </section>
+  </aside>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const state = { models: [], existing: {}, status: { active: {}, queue: [], history: [] }, category: "All", selected: new Set() };
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function toast(msg, isErr = false) {
+  const t = $("toast");
+  t.textContent = msg; t.className = "toast show" + (isErr ? " err" : "");
+  clearTimeout(toast._t); toast._t = setTimeout(() => (t.className = "toast"), 3000);
+}
+
+async function api(path, body) {
+  const opts = body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {};
+  const res = await fetch(path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+async function loadModels() {
+  const data = await api("/api/models");
+  state.models = data.models; state.existing = data.existing;
+  $("root").textContent = "COMFY_ROOT: " + data.comfy_root;
+  const d = data.disk;
+  $("diskText").textContent = d.total_gb ? `Disk: ${d.used_gb} / ${d.total_gb} GB used · ${d.free_gb} GB free` : "Disk: not available";
+  $("diskBar").style.width = (d.percent || 0) + "%";
+  renderChips(); renderRows();
+}
+
+async function loadStatus() {
+  try {
+    const prevActive = Object.keys(state.status.active).length;
+    state.status = await api("/api/download/status");
+    renderStatus();
+    // Refresh existence info when a download finished
+    if (Object.keys(state.status.active).length < prevActive) loadModels();
+    else renderRows();
+  } catch (e) { /* server restarting – retry on next tick */ }
+}
+
+function stateOf(m) {
+  if (state.status.active[m.id]) return "downloading";
+  if (state.status.queue.includes(m.id)) return "queued";
+  if (state.existing[m.id]) return "present";
+  return "missing";
+}
+
+function visibleModels() {
+  const q = $("search").value.trim().toLowerCase();
+  const f = $("filterState").value;
+  return state.models.filter((m) => {
+    if (state.category !== "All" && m.category !== state.category) return false;
+    if (q && !(m.name + " " + m.filename + " " + m.dest).toLowerCase().includes(q)) return false;
+    const s = stateOf(m);
+    if (f === "missing" && s === "present") return false;
+    if (f === "present" && s !== "present") return false;
+    if (f === "user" && !m.id.startsWith("u")) return false;
+    return true;
+  });
+}
+
+function renderChips() {
+  const counts = {};
+  state.models.forEach((m) => (counts[m.category] = (counts[m.category] || 0) + 1));
+  const cats = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  const chip = (c, n) => `<span class="chip ${state.category === c ? "active" : ""}" data-cat="${esc(c)}">${esc(c)}<span class="n">${n}</span></span>`;
+  $("chips").innerHTML = chip("All", state.models.length) + cats.map((c) => chip(c, counts[c])).join("");
+  $("catList").innerHTML = cats.map((c) => `<option value="${esc(c)}">`).join("");
+}
+
+function renderRows() {
+  const list = visibleModels();
+  if (!list.length) { $("rows").innerHTML = `<tr><td colspan="7" class="empty">No models match.</td></tr>`; updateSel(); return; }
+  $("rows").innerHTML = list.map((m) => {
+    const s = stateOf(m); const ex = state.existing[m.id]; const a = state.status.active[m.id];
+    let badge = `<span class="badge">missing</span>`;
+    if (s === "present") badge = `<span class="badge ok">✓ ${ex.size_mb} MB</span>`;
+    if (s === "queued") badge = `<span class="badge q">queued</span>`;
+    if (s === "downloading") badge = `<span class="badge dl">${a.progress}%</span>`;
+    const isUser = m.id.startsWith("u");
+    const actions = [
+      s === "present" ? `<button class="small danger" data-delfile="${esc(m.id)}" title="Delete file from disk">Delete file</button>` : "",
+      isUser ? `<button class="small danger" data-delmodel="${esc(m.id)}" title="Remove custom model from catalog">Remove</button>` : "",
+    ].join(" ");
+    const disabled = s === "downloading" || s === "queued" ? "disabled" : "";
+    return `<tr>
+      <td><input type="checkbox" data-id="${esc(m.id)}" ${state.selected.has(m.id) ? "checked" : ""} ${disabled}></td>
+      <td class="name">${esc(m.name)} ${isUser ? '<span class="badge user">custom</span>' : ""}<div class="dest">${esc(m.filename)}</div></td>
+      <td>${esc(m.category)}</td>
+      <td>${esc(m.size)}</td>
+      <td class="dest">${esc(m.dest)}</td>
+      <td>${badge}</td>
+      <td>${actions}</td>
+    </tr>`;
+  }).join("");
+  updateSel();
+}
+
+function renderStatus() {
+  const { active, queue, history } = state.status;
+  const byId = Object.fromEntries(state.models.map((m) => [m.id, m]));
+  const act = Object.entries(active);
+  $("active").innerHTML = act.length ? act.map(([id, j]) => `
+    <div class="job">
+      <div class="row"><strong>${esc(j.model.name)}</strong><button class="small danger" data-cancel="${esc(id)}">Cancel</button></div>
+      <div class="bar" style="margin:6px 0"><span style="width:${j.progress}%"></span></div>
+      <div class="meta">${j.progress}% · ${esc(j.speed || "–")} · ETA ${esc(j.eta || "–")}</div>
+    </div>`).join("") : `<div class="empty">No active downloads.</div>`;
+  $("queue").innerHTML = queue.length ? queue.map((id) => `
+    <div class="job"><div class="row"><span>${esc(byId[id]?.name || id)}</span><button class="small danger" data-cancel="${esc(id)}">Remove</button></div></div>`).join("")
+    : `<div class="empty">Queue is empty.</div>`;
+  $("history").innerHTML = history.length ? history.map((h) => {
+    const cls = h.status === "completed" ? "ok" : h.status === "cancelled" ? "q" : "";
+    return `<div class="job"><div class="row"><span>${esc(h.model.name)}</span><span class="badge ${cls}">${esc(h.status)}</span></div>${h.error ? `<div class="meta">${esc(h.error)}</div>` : ""}</div>`;
+  }).join("") : `<div class="empty">Nothing yet.</div>`;
+}
+
+function updateSel() {
+  const n = state.selected.size;
+  $("selInfo").textContent = `${n} selected`;
+  $("downloadBtn").disabled = n === 0;
+}
+
+// --- Events ---
+$("search").addEventListener("input", renderRows);
+$("filterState").addEventListener("change", renderRows);
+$("chips").addEventListener("click", (e) => {
+  const c = e.target.closest(".chip"); if (!c) return;
+  state.category = c.dataset.cat; renderChips(); renderRows();
+});
+$("rows").addEventListener("change", (e) => {
+  const id = e.target.dataset.id; if (!id) return;
+  e.target.checked ? state.selected.add(id) : state.selected.delete(id); updateSel();
+});
+$("selectVisible").addEventListener("click", () => {
+  visibleModels().filter((m) => stateOf(m) === "missing").forEach((m) => state.selected.add(m.id)); renderRows();
+});
+$("clearSel").addEventListener("click", () => { state.selected.clear(); renderRows(); });
+$("downloadBtn").addEventListener("click", async () => {
+  try {
+    const r = await api("/api/download", { model_ids: [...state.selected] });
+    toast(`${r.queued.length} model(s) queued`);
+    state.selected.clear(); await loadStatus();
+  } catch (e) { toast(e.message, true); }
+});
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  try {
+    if (b.dataset.cancel) { await api("/api/download/cancel", { id: b.dataset.cancel }); await loadStatus(); }
+    if (b.dataset.delfile && confirm("Delete this file from disk?")) { await api("/api/models/delete-file", { id: b.dataset.delfile }); toast("File deleted"); await loadModels(); }
+    if (b.dataset.delmodel && confirm("Remove this custom model from the catalog?")) { await api("/api/models/delete", { id: b.dataset.delmodel }); toast("Model removed"); await loadModels(); }
+  } catch (err) { toast(err.message, true); }
+});
+$("saveConc").addEventListener("click", async () => {
+  try { const r = await api("/api/settings", { max_concurrent: Number($("maxConc").value) }); $("maxConc").value = r.max_concurrent; toast(`Parallel downloads: ${r.max_concurrent}`); }
+  catch (e) { toast(e.message, true); }
+});
+$("addForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    const body = Object.fromEntries(new FormData(e.target).entries());
+    await api("/api/models/add", body); e.target.reset(); toast("Model added"); await loadModels();
+  } catch (err) { toast(err.message, true); }
+});
+
+(async () => {
+  try {
+    const s = await api("/api/settings"); $("maxConc").value = s.max_concurrent;
+    await loadModels(); await loadStatus();
+  } catch (e) { toast("Could not reach the server: " + e.message, true); }
+  setInterval(loadStatus, 2000);
+})();
+</script>
+</body>
+</html>

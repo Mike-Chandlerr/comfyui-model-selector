@@ -71,8 +71,11 @@ class DownloadManager:
                     models = load_models()
                     model = next((m for m in models if m["id"] == model_id), None)
                     if model:
-                        self._start_download(model)
-                        active_count += 1
+                        try:
+                            self._start_download(model)
+                            active_count += 1
+                        except (ValueError, OSError) as e:
+                            self.history.insert(0, {"model": model, "status": "failed", "error": str(e), "progress": 0})
 
     def enqueue(self, model_ids):
         """Add models to download queue."""
@@ -88,9 +91,8 @@ class DownloadManager:
 
     def _start_download(self, model):
         """Start a wget download in background."""
-        dest_dir = os.path.join(COMFY_ROOT, model["dest"])
-        os.makedirs(dest_dir, exist_ok=True)
-        dest_file = os.path.join(dest_dir, model["filename"])
+        dest_file = safe_model_path(model)
+        os.makedirs(os.path.dirname(dest_file), exist_ok=True)
 
         dl_id = model["id"]
         self.active_downloads[dl_id] = {
@@ -203,6 +205,21 @@ class DownloadManager:
 dm = DownloadManager()
 
 
+# --- Request / Path Helpers ---
+def json_body():
+    """Return the JSON body as a dict (empty dict for missing/invalid JSON)."""
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+def safe_model_path(model):
+    """Resolve the model's target path and make sure it stays inside COMFY_ROOT."""
+    root = os.path.realpath(COMFY_ROOT)
+    path = os.path.realpath(os.path.join(root, model["dest"], model["filename"]))
+    if os.path.commonpath([root, path]) != root:
+        raise ValueError("Path escapes COMFY_ROOT")
+    return path
+
+
 # --- Disk Usage Helper ---
 def get_disk_usage():
     """Get disk usage of COMFY_ROOT."""
@@ -214,7 +231,7 @@ def get_disk_usage():
             "free_gb": round(usage.free / (1024**3), 1),
             "percent": round(usage.used / usage.total * 100, 1),
         }
-    except:
+    except OSError:
         return {"total_gb": 0, "used_gb": 0, "free_gb": 0, "percent": 0}
 
 def check_existing_models():
@@ -222,8 +239,11 @@ def check_existing_models():
     models = load_models()
     existing = {}
     for m in models:
-        filepath = os.path.join(COMFY_ROOT, m["dest"], m["filename"])
-        if os.path.exists(filepath):
+        try:
+            filepath = safe_model_path(m)
+        except ValueError:
+            continue
+        if os.path.isfile(filepath):
             size = os.path.getsize(filepath)
             existing[m["id"]] = {
                 "exists": True,
@@ -251,7 +271,7 @@ def api_models():
 
 @app.route("/api/download", methods=["POST"])
 def api_download():
-    data = request.json
+    data = json_body()
     model_ids = data.get("model_ids", [])
     if not model_ids:
         return jsonify({"error": "No model_ids provided"}), 400
@@ -260,7 +280,7 @@ def api_download():
 
 @app.route("/api/download/cancel", methods=["POST"])
 def api_cancel():
-    data = request.json
+    data = json_body()
     dl_id = data.get("id")
     success = dm.cancel(dl_id)
     return jsonify({"success": success})
@@ -272,11 +292,19 @@ def api_status():
 @app.route("/api/models/add", methods=["POST"])
 def api_add_model():
     """Add a new custom model."""
-    data = request.json
+    data = json_body()
     required = ["name", "category", "size", "url", "dest", "filename"]
     for field in required:
-        if not data.get(field):
+        if not str(data.get(field, "")).strip():
             return jsonify({"error": f"Missing field: {field}"}), 400
+    if not re.match(r"^https?://", data["url"]):
+        return jsonify({"error": "url must start with http:// or https://"}), 400
+    if "/" in data["filename"] or "\\" in data["filename"] or data["filename"] in (".", ".."):
+        return jsonify({"error": "filename must not contain path separators"}), 400
+    try:
+        safe_model_path({"dest": data["dest"], "filename": data["filename"]})
+    except ValueError:
+        return jsonify({"error": "dest must stay inside COMFY_ROOT"}), 400
 
     user_models = load_user_models()
     new_id = f"u{len(user_models):04d}_{uuid.uuid4().hex[:6]}"
@@ -296,7 +324,7 @@ def api_add_model():
 @app.route("/api/models/delete", methods=["POST"])
 def api_delete_model():
     """Delete a user-added model (not base models)."""
-    data = request.json
+    data = json_body()
     model_id = data.get("id")
     user_models = load_user_models()
     before = len(user_models)
@@ -309,14 +337,17 @@ def api_delete_model():
 @app.route("/api/models/delete-file", methods=["POST"])
 def api_delete_file():
     """Delete a downloaded model file from disk."""
-    data = request.json
+    data = json_body()
     model_id = data.get("id")
     models = load_models()
     model = next((m for m in models if m["id"] == model_id), None)
     if not model:
         return jsonify({"error": "Model not found"}), 404
-    filepath = os.path.join(COMFY_ROOT, model["dest"], model["filename"])
-    if os.path.exists(filepath):
+    try:
+        filepath = safe_model_path(model)
+    except ValueError:
+        return jsonify({"error": "Path escapes COMFY_ROOT"}), 400
+    if os.path.isfile(filepath):
         os.remove(filepath)
         return jsonify({"success": True, "deleted": filepath})
     return jsonify({"error": "File not found on disk"}), 404
@@ -324,9 +355,12 @@ def api_delete_file():
 @app.route("/api/settings", methods=["GET", "POST"])
 def api_settings():
     if request.method == "POST":
-        data = request.json
-        max_conc = data.get("max_concurrent", 2)
-        dm.max_concurrent = max(1, min(5, int(max_conc)))
+        data = json_body()
+        try:
+            max_conc = int(data.get("max_concurrent", 2))
+        except (TypeError, ValueError):
+            return jsonify({"error": "max_concurrent must be a number"}), 400
+        dm.max_concurrent = max(1, min(5, max_conc))
         return jsonify({"max_concurrent": dm.max_concurrent})
     return jsonify({
         "max_concurrent": dm.max_concurrent,

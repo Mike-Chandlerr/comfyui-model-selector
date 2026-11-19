@@ -3,10 +3,11 @@ FROM python:3.12-slim
 # Install wget for downloads
 RUN apt-get update && apt-get install -y wget curl && rm -rf /var/lib/apt/lists/*
 
-# Install Flask
-RUN pip install --no-cache-dir flask
-
 WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
 COPY app.py .
