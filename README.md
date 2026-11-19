@@ -1,94 +1,48 @@
----
-title: ComfyUI Model Downloader
-emoji: ⚡
-colorFrom: blue
-colorTo: purple
-sdk: docker
-app_port: 5000
-pinned: true
-license: mit
-short_description: 145 AI Models Manager for ComfyUI
----
+# ComfyUI Model Downloader
 
-# ⚡ ComfyUI Model Downloader v1.1
+Flask-App zum Durchsuchen, Auswählen und Herunterladen von **145 kuratierten ComfyUI-Modellen** in **13 Kategorien**. Downloads laufen mit `wget -c` (fortsetzbar) in einer Warteschlange mit einstellbarer Parallelität.
 
-Web-basierter Model Manager für ComfyUI — **145 AI-Modelle** in **13 Kategorien**, kuratiert und sofort einsatzbereit.
+Eine verwandte Variante läuft als Hugging-Face-Space: [MikeChandler/comfyui-model-downloader-v1.1](https://huggingface.co/spaces/MikeChandler/comfyui-model-downloader-v1.1).
 
----
+## Funktionen (dieser Repo-Stand)
 
-## 🎯 Was ist das?
+- Katalog in `models.json`: Name, Kategorie, Größe, Download-URL und Zielpfad unter dem ComfyUI-Root
+- Prüft, welche Dateien bereits unter `COMFY_ROOT` liegen, und zeigt die Speicherbelegung
+- Download-Warteschlange (`MAX_CONCURRENT_DOWNLOADS`, Standard 2, über die API auf 1–5 begrenzbar), Fortschritt, Tempo und ETA aus der wget-Ausgabe
+- Abbrechen, Historie, erneutes Anstoßen (Resume durch `wget -c`)
+- Eigene Modelle dauerhaft in `/app/data/user_models.json` anlegen oder wieder löschen; heruntergeladene Dateien können von der Platte entfernt werden
 
-Eine Web-App zum Durchsuchen, Auswählen und Downloaden von AI-Modellen für [ComfyUI](https://github.com/comfyanonymous/ComfyUI). Statt mühsam einzelne URLs zusammenzusuchen, hast du hier alle wichtigen Modelle an einem Ort — sortiert nach Kategorie, mit Größenangaben und korrekten Zielpfaden.
-
-### Hier auf HuggingFace kannst du:
-- ✅ Alle 145 Modelle durchsuchen und filtern
-- ✅ Modelle auswählen und ein **Bash-Script generieren** (Copy & Paste)
-- ✅ Das Script auf deinem eigenen Server ausführen
-- ✅ Den Code klonen und selbst als Docker hosten
-
-### Auf deinem eigenen Server kannst du zusätzlich:
-- ✅ Downloads **direkt auf dem Server starten** mit Fortschrittsanzeige
-- ✅ Parallele Downloads (konfigurierbar)
-- ✅ Eigene Modelle dauerhaft hinzufügen
-- ✅ Sehen welche Modelle bereits installiert sind
-- ✅ Abgebrochene Downloads fortsetzen (Resume Support)
-
----
-
-## 📋 Modell-Kategorien (145 Modelle)
+### Modell-Kategorien (145 Einträge in `models.json`)
 
 | Kategorie | Anzahl | Beispiele |
 |---|---|---|
-| Other | 28 | SAM, IC-Light, SUPIR, MMAudio, InfiniteYou |
-| LoRA | 25 | ACE, FastWan, Lightx2v, CausVid, HYPER FLUX |
-| WAN Effects | 20 | Remade-AI: Assassin, Cakeify, Inflate, Zen... |
-| WAN Video | 17 | Wan 2.1/2.2, FramePack, Multitalk, Phantom |
-| CLIP | 13 | t5xxl, HiDream, umt5, LLaVA, SigLIP |
-| ControlNet | 11 | FLUX Inpainting, InstantX Union, QR Monster |
-| Qwen | 7 | Qwen Image Edit, Lightning, qwreal |
-| IPAdapter | 6 | SDXL, SD15, PuLID, InstantID |
-| VAE | 6 | FLUX ae, HiDream, SDXL, WAN 2.1 |
+| Other | 28 | Remacri, AbsoluteReality, AnimateLCM, SAM / SUPIR u. a. |
+| LoRA | 24 | ACE, Catvton, FastWan, Lightx2v |
+| WAN Effects | 20 | Remade-AI-Effekte (Assassin, Cakeify, …) |
+| WAN Video | 17 | Wan 2.1, FusioniX, VACE, Fun-Control |
+| CLIP | 13 | clip_l, t5xxl, HiDream, umt5, LLaVA |
+| ControlNet | 11 | FLUX Inpainting, InstantX Union, SD1.5 Depth/Tile |
+| Qwen | 7 | Qwen Image Edit, Lightning, GGUF |
+| IPAdapter | 6 | SDXL, SD1.5, InstantID |
+| VAE | 6 | FLUX ae, HiDream, SDXL, WAN |
 | FLUX | 4 | Dev fp8, Schnell Q4, Kontext, Fill |
 | Hunyuan | 4 | FramePack, Video 720p, 3D-dit-v2 |
 | SDXL | 3 | RealVisXL, Realism Engine, Sketch |
 | HiDream | 2 | i1 fast fp8, e1 full Q4 |
 
----
+## Voraussetzungen
 
-## 🚀 So verwendest du es
+- Docker, oder Python 3.12 mit Flask und `wget`
+- Ein ComfyUI-Verzeichnis, das nach `COMFY_ROOT` gemountet bzw. gesetzt wird
 
-### Option 1 — Bash-Script (einfachste Methode)
+**Hinweis:** Das Dockerfile kopiert `templates/` und `app.py` ruft `templates/index.html` auf. Dieser Ordner liegt derzeit **nicht** in diesem GitHub-Repository; `docker build` schlägt deshalb fehl, bis das Template ergänzt ist. Die REST-API in `app.py` und der Katalog in `models.json` sind vollständig enthalten.
 
-1. Öffne die App hier auf HuggingFace
-2. Wähle die Modelle aus die du brauchst
-3. Klicke **"📋 Bash Script kopieren"**
-4. Füge das Script auf deinem Server ein:
+## Start mit Docker (wenn `templates/` vorhanden ist)
 
 ```bash
-# Auf deinem Server (Unraid, Linux, WSL):
-bash download_models.sh
-
-# Oder mit anderem ComfyUI-Pfad:
-COMFY_ROOT="/dein/pfad/zu/ComfyUI" bash download_models.sh
-```
-
-Das Script erstellt automatisch alle Unterordner und lädt mit wget -c (Resume Support).
-
----
-
-### Option 2 — Self-Host als Docker (volle Power)
-
-Klone dieses Repository und starte es auf deinem eigenen Server. Dann hast du alle Features inkl. direkter Server-Downloads.
-
-```bash
-# 1. Repo klonen
-git clone https://huggingface.co/spaces/MikeChandler/comfyui-model-downloader-v1.1
-cd comfyui-model-downloader-v1.1
-
-# 2. Docker Image bauen
+git clone https://github.com/Mike-Chandlerr/comfyui-model-selector.git
+cd comfyui-model-selector
 docker build -t comfyui-model-downloader .
-
-# 3. Container starten
 docker run -d \
   --name comfyui-model-downloader \
   --restart unless-stopped \
@@ -100,65 +54,44 @@ docker run -d \
   comfyui-model-downloader
 ```
 
-Dann öffne http://dein-server:5050
+Danach: [http://localhost:5050](http://localhost:5050).
 
----
-
-### Option 3 — Unraid Server
+Ohne Docker, ebenfalls nur mit vorhandenem Template:
 
 ```bash
-cd /mnt/user/appdata/comfyui-model-downloader
-docker build -t comfyui-model-downloader .
-
-docker run -d \
-  --name comfyui-model-downloader \
-  --restart unless-stopped \
-  -p 5050:5000 \
-  -v /mnt/user/dein_share/ComfyUI:/comfyui-models \
-  -v /mnt/user/appdata/comfyui-model-downloader:/app/data \
-  -e MAX_CONCURRENT_DOWNLOADS=2 \
-  -e TZ=Europe/Vienna \
-  comfyui-model-downloader
+pip install flask
+export COMFY_ROOT=/pfad/zu/ComfyUI
+python app.py
 ```
 
-Erreichbar unter http://DEINE-UNRAID-IP:5050
+Die App lauscht auf `0.0.0.0` und Port `PORT` (Standard 5000).
 
----
+### Umgebungsvariablen
 
-## ⚙️ Konfiguration
-
-| Variable | Default | Beschreibung |
+| Variable | Standard | Bedeutung |
 |---|---|---|
-| COMFY_ROOT | /comfyui-models | ComfyUI-Pfad im Container (Volume Mount) |
-| MAX_CONCURRENT_DOWNLOADS | 2 | Max parallele Downloads (1-5) |
-| PORT | 5000 | Interner App-Port |
-| TZ | Europe/Vienna | Zeitzone |
+| `COMFY_ROOT` | `/comfyui-models` | ComfyUI-Wurzel für Downloads und Existenzprüfung |
+| `MODELS_JSON` | `/app/models.json` | Pfad zum Basiskatalog |
+| `USER_MODELS_JSON` | `/app/data/user_models.json` | Benutzerdefinierte Modelle |
+| `DATA_DIR` | `/app/data` | Persistentes Datenverzeichnis |
+| `MAX_CONCURRENT_DOWNLOADS` | `2` | Parallele Downloads |
+| `PORT` | `5000` | Interner App-Port |
 
----
-
-## 📡 API Endpunkte
-
-Die App bietet eine REST-API für Automatisierung (z.B. via n8n):
+## API
 
 | Methode | Endpunkt | Beschreibung |
 |---|---|---|
-| GET | /api/models | Alle Modelle + Disk Info |
-| POST | /api/download | Downloads starten |
-| GET | /api/download/status | Download-Fortschritt |
-| POST | /api/download/cancel | Download abbrechen |
-| POST | /api/models/add | Eigenes Modell hinzufügen |
-| POST | /api/models/delete | User-Modell löschen |
-| GET | /api/settings | Einstellungen |
+| `GET` | `/api/models` | Katalog, vorhandene Dateien, Speicherplatz, `comfy_root` |
+| `POST` | `/api/download` | Body: `{ "model_ids": ["m000", ...] }` — in die Warteschlange |
+| `GET` | `/api/download/status` | Aktive Jobs, Queue, Historie |
+| `POST` | `/api/download/cancel` | Body: `{ "id": "m000" }` — Abbruch |
+| `POST` | `/api/models/add` | Eigenes Modell (`name`, `category`, `size`, `url`, `dest`, `filename`) |
+| `POST` | `/api/models/delete` | Benutzer-Modell aus dem Katalog entfernen (nicht die Basis-Einträge) |
+| `POST` | `/api/models/delete-file` | Heruntergeladene Datei von der Platte löschen |
+| `GET` / `POST` | `/api/settings` | `max_concurrent` lesen oder setzen (1–5) |
 
----
+Beispiel zum Hinzufügen eines eigenen Modells:
 
-## 🔄 Eigene Modelle hinzufügen
-
-Im Self-Host Modus kannst du jederzeit neue Modelle ergänzen:
-
-**Web-Interface:** Klicke auf "+ Neues Modell" und gib Name, URL, Kategorie und Zielordner ein.
-
-**API:**
 ```bash
 curl -X POST http://localhost:5050/api/models/add \
   -H "Content-Type: application/json" \
@@ -172,27 +105,69 @@ curl -X POST http://localhost:5050/api/models/add \
   }'
 ```
 
-Eigene Modelle werden persistent gespeichert und überleben Container-Neustarts.
+## Technik
+
+Python 3.12, Flask, wget, Docker. Die bestehende README nennt die Lizenz MIT.
 
 ---
 
-## 🛠️ Troubleshooting
+# ComfyUI Model Downloader
 
-**Downloads brechen ab?** Einfach nochmal starten — wget -c setzt dort fort wo es aufgehört hat.
+A Flask app to browse, select, and download **145 curated ComfyUI models** across **13 categories**. Downloads use `wget -c` (resumable) and a queue with configurable concurrency.
 
-**Port 5050 belegt?** Ändere den Port: -p 5051:5000
+A related variant runs as a Hugging Face Space: [MikeChandler/comfyui-model-downloader-v1.1](https://huggingface.co/spaces/MikeChandler/comfyui-model-downloader-v1.1).
 
-**Container-Logs prüfen:**
+## Features (as in this repository)
+
+- Catalog in `models.json`: name, category, size, download URL, and destination under the ComfyUI root
+- Checks which files already exist under `COMFY_ROOT` and reports disk usage
+- Download queue (`MAX_CONCURRENT_DOWNLOADS`, default 2, clampable to 1–5 via the API), with progress, speed, and ETA parsed from wget
+- Cancel, history, and resume via `wget -c`
+- Custom models persisted in `/app/data/user_models.json`; downloaded files can be deleted from disk
+
+See the German section for the category table (counts taken from `models.json`).
+
+## Requirements
+
+- Docker, or Python 3.12 with Flask and `wget`
+- A ComfyUI directory mounted or set as `COMFY_ROOT`
+
+**Note:** The Dockerfile copies `templates/`, and `app.py` renders `templates/index.html`. That folder is **not** in this GitHub repository at the moment, so `docker build` will fail until the template is added. The REST API in `app.py` and the catalog in `models.json` are complete.
+
+## Run with Docker (once `templates/` is present)
+
 ```bash
-docker logs comfyui-model-downloader
+git clone https://github.com/Mike-Chandlerr/comfyui-model-selector.git
+cd comfyui-model-selector
+docker build -t comfyui-model-downloader .
+docker run -d \
+  --name comfyui-model-downloader \
+  --restart unless-stopped \
+  -p 5050:5000 \
+  -v /path/to/your/ComfyUI:/comfyui-models \
+  -v /path/to/appdata:/app/data \
+  -e MAX_CONCURRENT_DOWNLOADS=2 \
+  -e TZ=Europe/Vienna \
+  comfyui-model-downloader
 ```
 
+Then open [http://localhost:5050](http://localhost:5050).
+
+Without Docker, also only with a template in place:
+
+```bash
+pip install flask
+export COMFY_ROOT=/path/to/ComfyUI
+python app.py
+```
+
+The app listens on `0.0.0.0` and `PORT` (default 5000). Environment variables and API routes are listed in the German section.
+
+## Tech stack
+
+Python 3.12, Flask, wget, Docker. The existing README states the license is MIT.
+
 ---
 
-## 📄 Lizenz
-
-MIT — Frei verwendbar, auch kommerziell.
-
----
-
-*Erstellt von [MikeChandler](https://huggingface.co/MikeChandler) — für die ComfyUI Community*
+Michael Weidinger (Mike Chandler) – AI & Automation  
+[Hugging Face](https://huggingface.co/MikeChandler) · [LinkedIn](https://www.linkedin.com/in/michael-weidinger-76a9aa270/)
